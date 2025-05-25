@@ -98,6 +98,17 @@ function updateStats(){
   const perAttack=(multi>1)?Math.ceil(dmg/multi):null;
   // role description
   const desc=roleDescriptions[roleKey]||'';
+  // limited‑use per‑target calculation
+  let limitedStr='';
+  if(limited){
+    let targets;
+    if(effCrNumeric<=4) targets=2; // Tier I
+    else if(effCrNumeric<=10) targets=3; // Tier II
+    else if(effCrNumeric<=16) targets=6; // Tier III
+    else targets=9; // Tier IV+
+    const dmgPerTarget=Math.round(limitedDmg/targets);
+    limitedStr=` → <em>Limited‑use: ${limitedDmg} (${dmgPerTarget} to ${targets} target${targets>1?'s':''})</em>`;
+  }
   // build HTML
   let html=`<h3>CR ${crStr}`;
   if(tierKey!=='None'){html+=` → <span style='color:#900;'>${effCrDisplay}</span>`;}
@@ -109,7 +120,7 @@ function updateStats(){
   html+=`<div>AC: <strong>${ac}</strong></div>`;
   html+=`<div>Hit Points: <strong>${hp}</strong>${boss.hpBonus?` (includes +${boss.hpBonus} boss bonus)`:''}</div>`;
   html+=`<div>Attack Bonus: <strong>+${atk}</strong></div>`;
-  html+=`<div>Damage Budget/round: <strong>${dmg}</strong>${limited?` → <em>Limited‑use: ${limitedDmg}</em>`:''}</div>`;
+  html+=`<div>Damage Budget/round: <strong>${dmg}</strong>${limitedStr}</div>`;
   if(perAttack!==null){html+=`<div>Damage per attack (×${multi}): <strong>${perAttack}</strong></div>`;}
   html+=`<div>Save DC: <strong>${base.dc}</strong></div>`;
   html+=`<div>Good Save Bonus: <strong>+${base.save}</strong></div>`;
