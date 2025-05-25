@@ -4,13 +4,14 @@
   <meta charset="UTF-8" />
   <title>Monster Quick‑Stats Generator</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;padding:1rem;max-width:700px;margin:auto}
+    body{font-family:Arial,Helvetica,sans-serif;padding:1rem;max-width:760px;margin:auto}
     label{display:block;margin:0.4rem 0}
     select,input[type="checkbox"]{margin-left:0.5rem}
     #stats{margin-top:1rem;padding:1rem;border:1px solid #ccc;border-radius:8px;background:#fafafa}
     #stats div{margin:0.25rem 0}
     .roleDesc{margin:0.25rem 0 0.6rem;font-size:0.9rem;color:#333;font-style:italic}
     .note{font-size:0.8rem;color:#555}
+    ul{margin:0.25rem 0 0.5rem 1.2rem;padding:0}
   </style>
 </head>
 <body>
@@ -18,6 +19,8 @@
   <label>Challenge Rating (CR): <select id="crSelect"></select></label>
   <label>Role template: <select id="roleSelect"></select></label>
   <label>Boss tier: <select id="bossSelect"></select></label>
+  <label>Multiattack: <select id="multiSelect"></select></label>
+  <label>Monster template: <select id="monsterSelect"></select></label>
   <label><input type="checkbox" id="limitedUse"> Add limited‑use attack (×4 damage budget)</label>
   <section id="stats"></section>
 <script>
@@ -26,22 +29,110 @@ const crData={"0":{ac:12,hp:3,atk:2,dmg:1,dc:9,save:1},"1/8":{ac:12,hp:9,atk:3,d
 const roles={"No Template":{acMod:0,hpMult:1,atkMod:0,dmgMult:1},"Soldier (Defender)":{acMod:2,hpMult:1.25,atkMod:0,dmgMult:0.9},"Brute":{acMod:-2,hpMult:1.5,atkMod:-1,dmgMult:1.25},"Artillery":{acMod:-2,hpMult:0.75,atkMod:1,dmgMult:1.25},"Skirmisher":{acMod:1,hpMult:1,atkMod:1,dmgMult:1},"Controller":{acMod:0,hpMult:1,atkMod:0,dmgMult:0.75},"Lurker":{acMod:0,hpMult:0.75,atkMod:2,dmgMult:1.5}};
 const roleDescriptions={"No Template":"Baseline creature without specialised tactics.","Soldier (Defender)":"Tough, high‑AC blocker that pins foes (e.g., shield guardian).","Brute":"Slow, durable powerhouse with heavy blows (e.g., ogre).","Artillery":"Fragile but deadly ranged threat (e.g., archmage).","Skirmisher":"Fast hit‑and‑run striker (e.g., goblin).","Controller":"Uses AoE & control effects (e.g., mind flayer).","Lurker":"Stealthy ambusher with burst damage (e.g., assassin)."};
 const bossTiers={None:{la:0,res:0,hpBonus:0,crInc:0},Elite:{la:1,res:1,hpBonus:20,crInc:1},Boss:{la:2,res:2,hpBonus:30,crInc:2},Legendary:{la:3,res:3,hpBonus:40,crInc:3},Epic:{la:4,res:4,hpBonus:50,crInc:4}};
+const multiOptions={0:{label:"No Multiattack",attacks:0},2:{label:"Multiattack (2) – Recommended CR 5+",attacks:2},3:{label:"Multiattack (3) – Recommended CR 11+",attacks:3},4:{label:"Multiattack (4) – Recommended CR 20+",attacks:4}};
+// ===== Monster templates (Microlite20) =====
+const monsterTemplates={
+  None:{abilities:[],immunity:false},
+  Ankheg:{abilities:["Acid Spray ([DEX save] [dmg] acid damage, save halves)"]},
+  Choker:{abilities:["Tentacle grapples on hit (escape [DC])","Constrict ([dmg] bludgeoning)"]},
+  "Earth Elemental":{abilities:["Damage Resistance (half damage from non‑magical weapons)"]},
+  Gargoyle:{abilities:["Damage Resistance (half damage from non‑magical weapons)"]},
+  "Gelatinous Cube":{abilities:["Engulf ([DEX save] [dmg] damage, restrained; [dmg] damage each turn)","Transparent (DC [DC] to notice when still)"]},
+  "Hell Hound":{abilities:["Fire Breath ([DEX save] [dmg] fire damage, save halves)"]},
+  "Rust Monster":{abilities:["Rust (metal object hit must pass [DEX save] or corrode)"]},
+  Shadow:{abilities:["Strength Drain ([dmg] necrotic, −1d4 STR)","Damage Resistance (half damage from non‑magical weapons)"]},
+  "Stone Golem":{abilities:["Slow ([MIND save] speed halved, one attack/turn)","Damage Immunity (only harmed by adamantine weapons or magic)"],immunity:true},
+  Troll:{abilities:["Regeneration (10 hp each round; acid or fire stops)"]},
+  "Vampire Spawn":{abilities:["Bite: Life Absorb (reduces target max HP by damage dealt, heals self half)","Damage Resistance (half damage from non‑magical weapons)","Vampire Weaknesses (sunlight, running water, etc. cause 20 damage each turn)"]},
+  Werewolf:{abilities:["Lycanthropy (bite can curse target)","Damage Immunity (only harmed by silver weapons or magic)"],immunity:true},
+  Wight:{abilities:["Life Drain ([DC] STR save, reduces target max HP by damage dealt)"]},
+  Stirge:{abilities:["Attach: Blood Drain (drains [dmg] hp each turn while attached)"]},
+  Wyvern:{abilities:["Poison Stinger ([STR save] [dmg] poison damage, save halves)"]},
+  Zombie:{abilities:["Undead Fortitude (when reduced to 0 hp, makes [5 + damage taken] STR save to stay at 1 hp)"]}
+};
 // ===== Populate dropdowns =====
 const crSelect=document.getElementById('crSelect');
 const roleSelect=document.getElementById('roleSelect');
 const bossSelect=document.getElementById('bossSelect');
+const multiSelect=document.getElementById('multiSelect');
+const monsterSelect=document.getElementById('monsterSelect');
 const crOrder=["0","1/8","1/4","1/2","1"];for(let i=2;i<=26;i++){crOrder.push(String(i));}
 crOrder.forEach(cr=>{if(crData[cr])crSelect.add(new Option(cr,cr));});
 Object.keys(roles).forEach(r=>roleSelect.add(new Option(r,r)));
 Object.keys(bossTiers).forEach(t=>bossSelect.add(new Option(t,t)));
-crSelect.value='0';roleSelect.value='No Template';bossSelect.value='None';
+Object.values(multiOptions).forEach(o=>multiSelect.add(new Option(o.label,o.attacks)));
+Object.keys(monsterTemplates).forEach(m=>monsterSelect.add(new Option(m,m)));
+crSelect.value='0';roleSelect.value='No Template';bossSelect.value='None';multiSelect.value='0';monsterSelect.value='None';
 // ===== Helpers =====
 function crValue(cr){if(cr.includes('/')){const[p,q]=cr.split('/').map(Number);return p/q<=0.5?0:p/q;}return Number(cr);} 
+function immunityHpMult(crNum){if(crNum<=4)return 0.5;if(crNum<=10)return 0.7;if(crNum<=16)return 0.8;return 1;}
 // ===== Update =====
-function updateStats(){const crStr=crSelect.value;const roleKey=roleSelect.value;const tierKey=bossSelect.value;const limited=document.getElementById('limitedUse').checked;const base=crData[crStr];if(!base)return;const role=roles[roleKey];const boss=bossTiers[tierKey];const ac=base.ac+role.acMod;const hpRole=Math.round(base.hp*role.hpMult);const atk=base.atk+role.atkMod;const dmg=Math.round(base.dmg*role.dmgMult);const hpFinal=hpRole+boss.hpBonus;const limitedDmg=limited?dmg*4:null;const effCrNumeric=crValue(crStr)+boss.crInc;const effCrDisplay=tierKey==='None'?crStr:(effCrNumeric>=1?Math.round(effCrNumeric):'1/2');
-const desc=roleDescriptions[roleKey]||'';
-document.getElementById('stats').innerHTML=`<h3>CR ${crStr}${tierKey!=='None'?` → <span style='color:#900;'>${effCrDisplay}</span>`:''} – ${roleKey}${tierKey!=='None'?`, ${tierKey}`:''}</h3>${desc?`<p class='roleDesc'>${desc}</p>`:''}<div>AC: <strong>${ac}</strong></div><div>Hit Points: <strong>${hpFinal}</strong>${boss.hpBonus?` (base ${hpRole}+${boss.hpBonus})`:''}</div><div>Attack Bonus: <strong>+${atk}</strong></div><div>Damage Budget/round: <strong>${dmg}</strong>${limited?` → <em>Limited‑use: ${limitedDmg}</em>`:''}</div><div>Save DC: <strong>${base.dc}</strong></div><div>Good Save Bonus: <strong>+${base.save}</strong></div>${tierKey!=='None'?`<div>Legendary Resistances/Day: <strong>${boss.res}</strong></div><div>Legendary Actions/Round: <strong>${boss.la}</strong></div>`:''}<p class='note'>Role, boss, and limited‑use multipliers applied.</p>`;}
-['change'].forEach(evt=>{crSelect.addEventListener(evt,updateStats);roleSelect.addEventListener(evt,updateStats);bossSelect.addEventListener(evt,updateStats);document.getElementById('limitedUse').addEventListener(evt,updateStats)});
+function updateStats(){
+  const crStr=crSelect.value;
+  const roleKey=roleSelect.value;
+  const tierKey=bossSelect.value;
+  const multi=Number(multiSelect.value);
+  const monsterKey=monsterSelect.value;
+  const limited=document.getElementById('limitedUse').checked;
+  const base=crData[crStr];
+  if(!base)return;
+  const role=roles[roleKey];
+  const boss=bossTiers[tierKey];
+  const template=monsterTemplates[monsterKey];
+  // --- core numbers
+  let ac=base.ac+role.acMod;
+  let hp=Math.round(base.hp*role.hpMult);
+  const atk=base.atk+role.atkMod;
+  const dmg=Math.round(base.dmg*role.dmgMult);
+  // immunity / resistance adjustment
+  const hasResistance=template.abilities?.some(a=>a.includes('Damage Resistance'));
+  if(template.immunity || hasResistance){hp=Math.round(hp*immunityHpMult(crValue(crStr)));}
+  // boss bonus
+  hp+=boss.hpBonus;
+  // limited‑use spike
+  const limitedDmg=limited?dmg*4:null;
+  // effective CR display
+  const effCrNumeric=crValue(crStr)+boss.crInc;
+  const effCrDisplay=tierKey==='None'?crStr:(effCrNumeric>=1?Math.round(effCrNumeric):'1/2');
+  // damages per attack
+  const perAttack=(multi>1)?Math.ceil(dmg/multi):null;
+  // role description
+  const desc=roleDescriptions[roleKey]||'';
+  // build HTML
+  let html=`<h3>CR ${crStr}`;
+  if(tierKey!=='None'){html+=` → <span style='color:#900;'>${effCrDisplay}</span>`;}
+  html+=` – ${roleKey}`;
+  if(tierKey!=='None'){html+=`, ${tierKey}`;}
+  if(monsterKey!=='None'){html+=`, ${monsterKey}`;}
+  html+='</h3>';
+  if(desc)html+=`<p class='roleDesc'>${desc}</p>`;
+  html+=`<div>AC: <strong>${ac}</strong></div>`;
+  html+=`<div>Hit Points: <strong>${hp}</strong>${boss.hpBonus?` (includes +${boss.hpBonus} boss bonus)`:''}</div>`;
+  html+=`<div>Attack Bonus: <strong>+${atk}</strong></div>`;
+  html+=`<div>Damage Budget/round: <strong>${dmg}</strong>${limited?` → <em>Limited‑use: ${limitedDmg}</em>`:''}</div>`;
+  if(perAttack!==null){html+=`<div>Damage per attack (×${multi}): <strong>${perAttack}</strong></div>`;}
+  html+=`<div>Save DC: <strong>${base.dc}</strong></div>`;
+  html+=`<div>Good Save Bonus: <strong>+${base.save}</strong></div>`;
+  if(tierKey!=='None'){html+=`<div>Legendary Resistances/Day: <strong>${boss.res}</strong></div><div>Legendary Actions/Round: <strong>${boss.la}</strong></div>`;}
+  // monster abilities
+  if(monsterKey!=='None'&&template.abilities.length){
+    html+="<div><strong>Special Abilities</strong><ul>"+
+          template.abilities.map(a=>`<li>${a.replace(/\b\d+d\d+(?:\+\d+)?/g,'[dmg]')}</li>`).join('')+
+          "</ul></div>";
+  }
+  html+="<p class='note'>Role, boss, multiattack, monster template and limited‑use modifiers applied.</p>";
+  // render
+  document.getElementById('stats').innerHTML=html;
+}
+// ===== listeners =====
+['change'].forEach(evt=>{[
+  crSelect,
+  roleSelect,
+  bossSelect,
+  multiSelect,
+  monsterSelect,
+  document.getElementById('limitedUse')
+].forEach(el=>el.addEventListener(evt,updateStats));});
 updateStats();
 </script>
 </body>
