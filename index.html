@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Monster Stats by CR Widget</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 1rem;
+    max-width: 600px;
+    margin: auto;
+  }
+  label {
+    display: block;
+    margin: 0.5rem 0;
+  }
+  select, input[type="checkbox"] {
+    margin-left: 0.5rem;
+  }
+  #stats {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+  #stats div {
+    margin: 0.25rem 0;
+  }
+  .note {
+    font-size: 0.8rem;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+  <h2>Monster Quick‑Stats Generator</h2>
+
+  <label>
+    Challenge Rating (CR):
+    <select id="crSelect"></select>
+  </label>
+
+  <label>
+    Role template:
+    <select id="roleSelect"></select>
+  </label>
+
+  <label>
+    <input type="checkbox" id="limitedUse" />
+    Add limited‑use attack (×4 damage budget)
+  </label>
+
+  <section id="stats"></section>
+
+  <script>
+    // --- base stats from Blog of Holding quick‑stats table
+    const crData = {
+      "0": { ac: 12, hp: 3, atk: 2, dmg: 1, dc: 9, save: 1 },
+      "1/8": { ac: 12, hp: 9, atk: 3, dmg: 3, dc: 10, save: 2 },
+      "1/4": { ac: 13, hp: 15, atk: 3, dmg: 5, dc: 10, save: 2 },
+      "1/2": { ac: 13, hp: 24, atk: 4, dmg: 8, dc: 11, save: 3 },
+      "1": { ac: 13, hp: 30, atk: 4, dmg: 10, dc: 11, save: 3 },
+      "2": { ac: 13, hp: 45, atk: 5, dmg: 15, dc: 12, save: 4 },
+      "3": { ac: 14, hp: 60, atk: 5, dmg: 20, dc: 12, save: 4 },
+      "4": { ac: 14, hp: 75, atk: 6, dmg: 25, dc: 13, save: 5 },
+      "5": { ac: 14, hp: 90, atk: 6, dmg: 30, dc: 13, save: 5 },
+      "6": { ac: 15, hp: 105, atk: 7, dmg: 35, dc: 14, save: 6 },
+      "7": { ac: 15, hp: 120, atk: 7, dmg: 40, dc: 14, save: 6 },
+      "8": { ac: 15, hp: 120, atk: 8, dmg: 40, dc: 15, save: 7 },
+      "9": { ac: 16, hp: 135, atk: 8, dmg: 45, dc: 15, save: 7 },
+      "10": { ac: 16, hp: 150, atk: 9, dmg: 50, dc: 16, save: 8 },
+      "11": { ac: 16, hp: 165, atk: 9, dmg: 55, dc: 16, save: 8 },
+      "12": { ac: 17, hp: 180, atk: 10, dmg: 60, dc: 17, save: 9 },
+      "13": { ac: 17, hp: 195, atk: 10, dmg: 65, dc: 17, save: 9 },
+      "14": { ac: 17, hp: 210, atk: 11, dmg: 70, dc: 18, save: 10 },
+      "15": { ac: 18, hp: 225, atk: 11, dmg: 75, dc: 18, save: 10 },
+      "16": { ac: 18, hp: 240, atk: 12, dmg: 80, dc: 19, save: 11 },
+      "17": { ac: 18, hp: 255, atk: 12, dmg: 85, dc: 19, save: 11 },
+      "18": { ac: 19, hp: 270, atk: 13, dmg: 90, dc: 20, save: 12 },
+      "19": { ac: 19, hp: 285, atk: 13, dmg: 95, dc: 20, save: 12 },
+      "20": { ac: 19, hp: 300, atk: 14, dmg: 100, dc: 21, save: 13 },
+      "21": { ac: 20, hp: 315, atk: 14, dmg: 105, dc: 21, save: 13 },
+      "22": { ac: 20, hp: 330, atk: 15, dmg: 110, dc: 22, save: 14 },
+      "23": { ac: 20, hp: 345, atk: 15, dmg: 115, dc: 22, save: 14 },
+      "24": { ac: 21, hp: 360, atk: 16, dmg: 120, dc: 23, save: 15 },
+      "25": { ac: 21, hp: 375, atk: 16, dmg: 125, dc: 23, save: 15 },
+      "26": { ac: 21, hp: 390, atk: 17, dmg: 130, dc: 24, save: 16 }
+    };
+
+    // --- role modifiers derived from Blog of Holding roles table
+    const roles = {
+      "No Template": { acMod: 0, hpMult: 1.0, atkMod: 0, dmgMult: 1.0 },
+      "Soldier (Defender)": { acMod: 2, hpMult: 1.25, atkMod: 0, dmgMult: 0.9 },
+      "Brute": { acMod: -2, hpMult: 1.5, atkMod: -1, dmgMult: 1.25 },
+      "Artillery": { acMod: -2, hpMult: 0.75, atkMod: 1, dmgMult: 1.25 },
+      "Skirmisher": { acMod: 1, hpMult: 1.0, atkMod: 1, dmgMult: 1.0 },
+      "Controller": { acMod: 0, hpMult: 1.0, atkMod: 0, dmgMult: 0.75 },
+      "Lurker": { acMod: 0, hpMult: 0.75, atkMod: 2, dmgMult: 1.5 }
+    };
+
+    // Ordered list for CR dropdown
+    const crOrder = ["0", "1/8", "1/4", "1/2", "1"];
+    for (let i = 2; i <= 26; i++) crOrder.push(String(i));
+
+    // Populate dropdowns
+    const crSelect = document.getElementById("crSelect");
+    const roleSelect = document.getElementById("roleSelect");
+
+    crOrder.forEach(cr => {
+      if (!crData[cr]) return; // skip if CR not defined (future‑proof)
+      const opt = document.createElement("option");
+      opt.value = cr;
+      opt.textContent = cr;
+      crSelect.appendChild(opt);
+    });
+
+    Object.keys(roles).forEach(role => {
+      const opt = document.createElement("option");
+      opt.value = role;
+      opt.textContent = role;
+      roleSelect.appendChild(opt);
+    });
+
+    // Default selections
+    crSelect.value = "0";
+    roleSelect.value = "No Template";
+
+    // Update display when controls change
+    crSelect.addEventListener("change", updateStats);
+    roleSelect.addEventListener("change", updateStats);
+    document.getElementById("limitedUse").addEventListener("change", updateStats);
+
+    // Initial render
+    updateStats();
+
+    function updateStats() {
+      const cr = crSelect.value;
+      const role = roleSelect.value;
+      const limited = document.getElementById("limitedUse").checked;
+
+      const base = crData[cr];
+      const mod = roles[role];
+
+      const ac = base.ac + mod.acMod;
+      const hp = Math.round(base.hp * mod.hpMult);
+      const atk = base.atk + mod.atkMod;
+      const dmg = Math.round(base.dmg * mod.dmgMult);
+      const limitedDmg = limited ? dmg * 4 : null;
+
+      const html = `
+        <h3>CR ${cr} – ${role}</h3>
+        <div>AC: <strong>${ac}</strong></div>
+        <div>Hit Points: <strong>${hp}</strong></div>
+        <div>Attack Bonus: <strong>+${atk}</strong></div>
+        <div>Damage Budget (per round): <strong>${dmg}</strong>${limited ? ` → <em>Limited‑use: ${limitedDmg}</em>` : ""}</div>
+        <div>Save DC: <strong>${base.dc}</strong></div>
+        <div>Good Save Bonus: <strong>+${base.save}</strong></div>
+        <p class="note">Damage multipliers from roles and limited‑use applied after other adjustments.</p>
+      `;
+
+      document.getElementById("stats").innerHTML = html;
+    }
+  </script>
+</body>
+</html>
