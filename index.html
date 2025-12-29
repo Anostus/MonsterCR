@@ -2,148 +2,493 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Monster Quick‑Stats Generator</title>
+  <title>Monster Quick-Stats Generator</title>
   <style>
     body{font-family:Arial,Helvetica,sans-serif;padding:1rem;max-width:760px;margin:auto}
     label{display:block;margin:0.4rem 0}
-    select,input[type="checkbox"]{margin-left:0.5rem}
+    select,input[type="checkbox"],input[type="text"]{margin-left:0.5rem}
     #stats{margin-top:1rem;padding:1rem;border:1px solid #ccc;border-radius:8px;background:#fafafa}
     #stats div{margin:0.25rem 0}
     .roleDesc{margin:0.25rem 0 0.6rem;font-size:0.9rem;color:#333;font-style:italic}
     .note{font-size:0.8rem;color:#555}
     ul{margin:0.25rem 0 0.5rem 1.2rem;padding:0}
+    .statblock{font-family:Georgia,"Times New Roman",serif;line-height:1.35}
   </style>
 </head>
 <body>
-  <h2>Monster Quick‑Stats Generator</h2>
+  <h2>Monster Quick-Stats Generator</h2>
+
+  <label>Creature Name: <input type="text" id="nameInput" value="Creature" /></label>
   <label>Challenge Rating (CR): <select id="crSelect"></select></label>
   <label>Role template: <select id="roleSelect"></select></label>
   <label>Boss tier: <select id="bossSelect"></select></label>
   <label>Multiattack: <select id="multiSelect"></select></label>
   <label>Monster template: <select id="monsterSelect"></select></label>
-  <label><input type="checkbox" id="limitedUse"> Add limited‑use attack (×4 damage budget)</label>
+  <label><input type="checkbox" id="limitedUse"> Add limited-use attack (×4 damage budget)</label>
+  <label><input type="checkbox" id="statBlockMode"> Display as stat block</label>
+
   <section id="stats"></section>
+
 <script>
 // ===== Data tables =====
 const crData={"0":{ac:12,hp:3,atk:2,dmg:1,dc:9,save:1},"1/8":{ac:12,hp:9,atk:3,dmg:3,dc:10,save:2},"1/4":{ac:13,hp:15,atk:3,dmg:5,dc:10,save:2},"1/2":{ac:13,hp:24,atk:4,dmg:8,dc:11,save:3},"1":{ac:13,hp:30,atk:4,dmg:10,dc:11,save:3},"2":{ac:13,hp:45,atk:5,dmg:15,dc:12,save:4},"3":{ac:14,hp:60,atk:5,dmg:20,dc:12,save:4},"4":{ac:14,hp:75,atk:6,dmg:25,dc:13,save:5},"5":{ac:14,hp:90,atk:6,dmg:30,dc:13,save:5},"6":{ac:15,hp:105,atk:7,dmg:35,dc:14,save:6},"7":{ac:15,hp:120,atk:7,dmg:40,dc:14,save:6},"8":{ac:15,hp:120,atk:8,dmg:40,dc:15,save:7},"9":{ac:16,hp:135,atk:8,dmg:45,dc:15,save:7},"10":{ac:16,hp:150,atk:9,dmg:50,dc:16,save:8},"11":{ac:16,hp:165,atk:9,dmg:55,dc:16,save:8},"12":{ac:17,hp:180,atk:10,dmg:60,dc:17,save:9},"13":{ac:17,hp:195,atk:10,dmg:65,dc:17,save:9},"14":{ac:17,hp:210,atk:11,dmg:70,dc:18,save:10},"15":{ac:18,hp:225,atk:11,dmg:75,dc:18,save:10},"16":{ac:18,hp:240,atk:12,dmg:80,dc:19,save:11},"17":{ac:18,hp:255,atk:12,dmg:85,dc:19,save:11},"18":{ac:19,hp:270,atk:13,dmg:90,dc:20,save:12},"19":{ac:19,hp:285,atk:13,dmg:95,dc:20,save:12},"20":{ac:19,hp:300,atk:14,dmg:100,dc:21,save:13},"21":{ac:20,hp:315,atk:14,dmg:105,dc:21,save:13},"22":{ac:20,hp:330,atk:15,dmg:110,dc:22,save:14},"23":{ac:20,hp:345,atk:15,dmg:115,dc:22,save:14},"24":{ac:21,hp:360,atk:16,dmg:120,dc:23,save:15},"25":{ac:21,hp:375,atk:16,dmg:125,dc:23,save:15},"26":{ac:21,hp:390,atk:17,dmg:130,dc:24,save:16}};
-const roles={"No Template":{acMod:0,hpMult:1,atkMod:0,dmgMult:1},"Soldier (Defender)":{acMod:2,hpMult:1.25,atkMod:0,dmgMult:0.9},"Brute":{acMod:-2,hpMult:1.5,atkMod:-1,dmgMult:1.25},"Artillery":{acMod:-2,hpMult:0.75,atkMod:1,dmgMult:1.25},"Skirmisher":{acMod:1,hpMult:1,atkMod:1,dmgMult:1},"Controller":{acMod:0,hpMult:1,atkMod:0,dmgMult:0.75},"Lurker":{acMod:0,hpMult:0.75,atkMod:2,dmgMult:1.5}};
-const roleDescriptions={"No Template":"Baseline creature without specialised tactics.","Soldier (Defender)":"Tough, high‑AC blocker that pins foes (e.g., shield guardian).","Brute":"Slow, durable powerhouse with heavy blows (e.g., ogre).","Artillery":"Fragile but deadly ranged threat (e.g., archmage).","Skirmisher":"Fast hit‑and‑run striker (e.g., goblin).","Controller":"Uses AoE & control effects (e.g., mind flayer).","Lurker":"Stealthy ambusher with burst damage (e.g., assassin)."};
-const bossTiers={None:{la:0,res:0,hpBonus:0,crInc:0},Elite:{la:1,res:1,hpBonus:20,crInc:1},Boss:{la:2,res:2,hpBonus:30,crInc:2},Legendary:{la:3,res:3,hpBonus:40,crInc:3},Epic:{la:4,res:4,hpBonus:50,crInc:4}};
-const multiOptions={0:{label:"No Multiattack",attacks:0},2:{label:"Multiattack (2) – Recommended CR 5+",attacks:2},3:{label:"Multiattack (3) – Recommended CR 11+",attacks:3},4:{label:"Multiattack (4) – Recommended CR 20+",attacks:4}};
+
+const roles={
+  "No Template":{acMod:0,hpMult:1,atkMod:0,dmgMult:1},
+  "Soldier (Defender)":{acMod:2,hpMult:1.25,atkMod:0,dmgMult:0.9},
+  "Brute":{acMod:-2,hpMult:1.5,atkMod:-1,dmgMult:1.25},
+  "Artillery":{acMod:-2,hpMult:0.75,atkMod:1,dmgMult:1.25},
+  "Skirmisher":{acMod:1,hpMult:1,atkMod:1,dmgMult:1},
+  "Controller":{acMod:0,hpMult:1,atkMod:0,dmgMult:0.75},
+  "Lurker":{acMod:0,hpMult:0.75,atkMod:2,dmgMult:1.5}
+};
+
+const roleDescriptions={
+  "No Template":"Baseline creature without specialised tactics.",
+  "Soldier (Defender)":"Tough, high-AC blocker that pins foes (e.g., shield guardian).",
+  "Brute":"Slow, durable powerhouse with heavy blows (e.g., ogre).",
+  "Artillery":"Fragile but deadly ranged threat (e.g., archmage).",
+  "Skirmisher":"Fast hit-and-run striker (e.g., goblin).",
+  "Controller":"Uses AoE & control effects (e.g., mind flayer).",
+  "Lurker":"Stealthy ambusher with burst damage (e.g., assassin)."
+};
+
+const bossTiers={
+  None:{la:0,res:0,hpBonus:0,crInc:0},
+  Elite:{la:1,res:1,hpBonus:20,crInc:1},
+  Boss:{la:2,res:2,hpBonus:30,crInc:2},
+  Legendary:{la:3,res:3,hpBonus:40,crInc:3},
+  Epic:{la:4,res:4,hpBonus:50,crInc:4}
+};
+
+const multiOptions={
+  0:{label:"No Multiattack",attacks:0},
+  2:{label:"Multiattack (2) – Recommended CR 5+",attacks:2},
+  3:{label:"Multiattack (3) – Recommended CR 11+",attacks:3},
+  4:{label:"Multiattack (4) – Recommended CR 20+",attacks:4}
+};
+
 // ===== Monster templates (Microlite20) =====
 const monsterTemplates={
   None:{abilities:[],immunity:false},
-  Ankheg:{abilities:["Acid Spray ([DEX save] [dmg] acid damage, save halves)"]},
-  Choker:{abilities:["Tentacle grapples on hit (escape [DC])","Constrict ([dmg] bludgeoning)"]},
-  "Earth Elemental":{abilities:["Damage Resistance (half damage from non‑magical weapons)"]},
-  Gargoyle:{abilities:["Damage Resistance (half damage from non‑magical weapons)"]},
-  "Gelatinous Cube":{abilities:["Engulf ([DEX save] [dmg] damage, restrained; [dmg] damage each turn)","Transparent (DC [DC] to notice when still)"]},
-  "Hell Hound":{abilities:["Fire Breath ([DEX save] [dmg] fire damage, save halves)"]},
-  "Rust Monster":{abilities:["Rust (metal object hit must pass [DEX save] or corrode)"]},
-  Shadow:{abilities:["Strength Drain ([dmg] necrotic, −1d4 STR)","Damage Resistance (half damage from non‑magical weapons)"]},
-  "Stone Golem":{abilities:["Slow ([MIND save] speed halved, one attack/turn)","Damage Immunity (only harmed by adamantine weapons or magic)"],immunity:true},
-  Troll:{abilities:["Regeneration (10 hp each round; acid or fire stops)"]},
-  "Vampire Spawn":{abilities:["Bite: Life Absorb (reduces target max HP by damage dealt, heals self half)","Damage Resistance (half damage from non‑magical weapons)","Vampire Weaknesses (sunlight, running water, etc. cause 20 damage each turn)"]},
-  Werewolf:{abilities:["Lycanthropy (bite can curse target)","Damage Immunity (only harmed by silver weapons or magic)"],immunity:true},
-  Wight:{abilities:["Life Drain ([DC] STR save, reduces target max HP by damage dealt)"]},
-  Stirge:{abilities:["Attach: Blood Drain (drains [dmg] hp each turn while attached)"]},
-  Wyvern:{abilities:["Poison Stinger ([STR save] [dmg] poison damage, save halves)"]},
-  Zombie:{abilities:["Undead Fortitude (when reduced to 0 hp, makes [5 + damage taken] STR save to stay at 1 hp)"]}
+
+  "Generic Aberration":{abilities:[
+    "Tentacle attack [atk*] ([dmg per-attack] damage; [STR save] or paralyzed. If paralyzed and damage reduces target to 0 HP, target's brain is eaten.)"
+  ]},
+  "Generic Beast":{abilities:[
+    "Claw/Bite attack [atk*] ([dmg per-attack] damage)"
+  ]},
+  "Generic Dragon":{abilities:[
+    "Breath Weapon ([DEX save] [dmg dpr] damage, save halves)",
+    "Bite attack [atk*] ([dmg per-attack] damage)"
+  ]},
+  "Generic Elemental":{abilities:[
+    "Smash attack [atk*] ([dmg per-attack] damage)",
+    "Death Throes (on death, nearby creatures make [STR save] or take [dmg per-attack] damage)"
+  ]},
+  "Generic Fey":{abilities:[
+    "Shillelagh/Shortbow attack [atk*] ([dmg per-attack] damage)",
+    "Fey Charm ([MIND save] or become friendly for 24 hours)",
+    "Invisibility (lasts until it attacks or uses Fey Charm)"
+  ]},
+  "Generic Fiend":{abilities:[
+    "Aura (at start of each enemy's turn, [dmg per-attack] damage to all within 5 feet)",
+    "Trident/Firebolt attack [atk*] ([dmg per-attack] damage)"
+  ]},
+  "Generic Giant":{abilities:[
+    "Punch/Boulder attack [atk*] ([dmg per-attack] damage)"
+  ]},
+  "Generic Undead":{abilities:[
+    "Life Drain attack [atk*] ([dmg per-attack] necrotic; [STR save] or reduce target's max HP by damage taken)"
+  ]},
+  "Generic Vermin":{abilities:[
+    "Bite/Sting attack [atk*] ([dmg per-attack] damage; [STR save] or poisoned, giving disadvantage on attacks)",
+    "Web/Goo ([DEX save] or restrained)"
+  ]},
+
+  Ankheg:{abilities:[
+    "Acid Spray ([DEX save] [dmg dpr] acid damage, save halves)"
+  ]},
+  Choker:{abilities:[
+    "Tentacle attack [atk*] ([dmg per-attack] bludgeoning; grapples on hit, escape DC [DC])",
+    "Constrict attack vs. grappled creature ([dmg per-attack+1] bludgeoning)"
+  ]},
+  "Earth Elemental":{abilities:[
+    "Damage Resistance (half damage from non-magical weapons)"
+  ]},
+  Gargoyle:{abilities:[
+    "Damage Resistance (half damage from non-magical weapons)"
+  ]},
+  "Gelatinous Cube":{abilities:[
+    "Engulf ([DEX save] [dmg dpr] damage, restrained; [dmg per-attack] damage each turn)",
+    "Transparent (DC [DC] to notice when still)"
+  ]},
+  "Hell Hound":{abilities:[
+    "Fire Breath ([DEX save] [dmg dpr] fire damage, save halves)"
+  ]},
+  "Rust Monster":{abilities:[
+    "Rust attack [atk*] (metal object hit must pass [DEX save] or corrode)"
+  ]},
+  Shadow:{abilities:[
+    "Strength Drain attack [atk*] ([dmg per-attack] necrotic, −1d4 STR)",
+    "Damage Resistance (half damage from non-magical weapons)"
+  ]},
+  "Stone Golem":{abilities:[
+    "Slow ([MIND save] speed halved, one attack/turn)",
+    "Damage Immunity (only harmed by adamantine weapons or magic)"
+  ],immunity:true},
+  Troll:{abilities:[
+    "Regeneration (10 hp each round; acid or fire stops)"
+  ]},
+  "Vampire Spawn":{abilities:[
+    "Bite attack [atk*] ([dmg per-attack] piercing; Life Absorb: reduces target max HP by damage dealt, heals self half)",
+    "Damage Resistance (half damage from non-magical weapons)",
+    "Vampire Weaknesses (sunlight, running water, etc. cause 20 damage each turn)"
+  ]},
+  Werewolf:{abilities:[
+    "Bite attack [atk*] (Lycanthropy: can curse target)",
+    "Damage Immunity (only harmed by silver weapons or magic)"
+  ],immunity:true},
+  Wight:{abilities:[
+    "Life Drain attack [atk*] ([dmg dpr] necrotic; [STR save], reduces target max HP by damage dealt)"
+  ]},
+  Stirge:{abilities:[
+    "Proboscis attack [atk*] (on hit, attach; Blood Drain: drains [dmg per-attack] hp each turn while attached)"
+  ]},
+  Wyvern:{abilities:[
+    "Poison Stinger attack [atk*] ([STR save] [dmg dpr] poison damage, save halves)"
+  ]},
+  Zombie:{abilities:[
+    "Undead Fortitude (when reduced to 0 hp, makes [5 + damage taken] STR save to stay at 1 hp)"
+  ]}
 };
+
 // ===== Populate dropdowns =====
+const nameInput=document.getElementById('nameInput');
 const crSelect=document.getElementById('crSelect');
 const roleSelect=document.getElementById('roleSelect');
 const bossSelect=document.getElementById('bossSelect');
 const multiSelect=document.getElementById('multiSelect');
 const monsterSelect=document.getElementById('monsterSelect');
-const crOrder=["0","1/8","1/4","1/2","1"];for(let i=2;i<=26;i++){crOrder.push(String(i));}
+const limitedUse=document.getElementById('limitedUse');
+const statBlockMode=document.getElementById('statBlockMode');
+
+const crOrder=["0","1/8","1/4","1/2","1"];
+for(let i=2;i<=26;i++){crOrder.push(String(i));}
 crOrder.forEach(cr=>{if(crData[cr])crSelect.add(new Option(cr,cr));});
+
 Object.keys(roles).forEach(r=>roleSelect.add(new Option(r,r)));
 Object.keys(bossTiers).forEach(t=>bossSelect.add(new Option(t,t)));
 Object.values(multiOptions).forEach(o=>multiSelect.add(new Option(o.label,o.attacks)));
 Object.keys(monsterTemplates).forEach(m=>monsterSelect.add(new Option(m,m)));
-crSelect.value='0';roleSelect.value='No Template';bossSelect.value='None';multiSelect.value='0';monsterSelect.value='None';
+
+crSelect.value='0';
+roleSelect.value='No Template';
+bossSelect.value='None';
+multiSelect.value='0';
+monsterSelect.value='None';
+
 // ===== Helpers =====
-function crValue(cr){if(cr.includes('/')){const[p,q]=cr.split('/').map(Number);return p/q<=0.5?0:p/q;}return Number(cr);} 
-function immunityHpMult(crNum){if(crNum<=4)return 0.5;if(crNum<=10)return 0.7;if(crNum<=16)return 0.8;return 1;}
+function crValue(cr){
+  if(cr.includes('/')){
+    const [p,q]=cr.split('/').map(Number);
+    return p/q<=0.5?0:p/q;
+  }
+  return Number(cr);
+}
+function immunityHpMult(crNum){
+  if(crNum<=4)return 0.5;
+  if(crNum<=10)return 0.7;
+  if(crNum<=16)return 0.8;
+  return 1;
+}
+function d10CountForAverage(targetAvg){
+  // Average of d10 is 5.5
+  return Math.max(1, Math.round(targetAvg / 5.5));
+}
+function limitedTargetsForTier(effCrNumeric){
+  if(effCrNumeric<=4) return 2;
+  if(effCrNumeric<=10) return 3;
+  if(effCrNumeric<=16) return 6;
+  return 9;
+}
+function repeatAtk(atk, count){
+  const n = Math.max(1, count|0);
+  return Array.from({length:n}, () => `+${atk}`).join('/');
+}
+function parseSignedInt(maybeSigned){
+  if(!maybeSigned) return 0;
+  const cleaned = maybeSigned.replace(/\s+/g,'');
+  const n = parseInt(cleaned, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Replacement logic (both views)
+function formatAbilityText(text, { dprValue, perAttackValue, saveDc, atk, multiCount }){
+  let out = text;
+
+  out = out.replace(/\[dmg\s+(dpr|per-attack)\s*([+-]\s*\d+)?\]/g, (_m, kind, offsetRaw) => {
+    const base = (kind === 'dpr') ? dprValue : perAttackValue;
+    const off = parseSignedInt(offsetRaw);
+    return String(base + off);
+  });
+
+  out = out.replace(/\[atk\*\]/g, repeatAtk(atk, multiCount));
+  out = out.replace(/\[atk\]/g, `+${atk}`);
+
+  out = out.replace(/\[DEX save\]/g, `DC ${saveDc} DEX save`);
+  out = out.replace(/\[STR save\]/g, `DC ${saveDc} CON save`);
+  out = out.replace(/\[MIND save\]/g, `DC ${saveDc} WIS save`);
+  out = out.replace(/\[DC\]/g, String(saveDc));
+
+  out = out.replace(/\bDC\s*\d+\b/g, `DC ${saveDc}`);
+  out = out.replace(new RegExp(`\\bDC\\b(?!\\s*${saveDc}\\b)`, 'g'), `DC ${saveDc}`);
+
+  return out;
+}
+
+// ===== Statline helpers =====
+function renderAttackSpecial(specialText){
+  const m = specialText.match(/^(.*?)\s+\battack\b\s+(.*)$/i);
+  if(!m) return specialText;
+
+  const rawName = (m[1] || "").trim();
+  const rest = (m[2] || "").trim();
+
+  const pm = rest.match(/^(.*?)(?:\s*\((.*)\)\s*)$/);
+  const preParen = (pm ? pm[1] : rest).trim();
+  const inner = (pm ? pm[2] : "").trim();
+
+  let left = rawName;
+  if(preParen){
+    left = `${rawName} ${preParen}`.trim();
+  }
+
+  if(!inner){
+    return left;
+  }
+
+  const dm = inner.match(/^\s*(\d+)\s*(.*)$/s);
+  if(!dm){
+    return `${left} (${inner})`;
+  }
+
+  const dmgNum = parseInt(dm[1], 10);
+  let tail = (dm[2] || "").trim();
+  tail = tail.replace(/^\s*damage\b\s*[,;:]?\s*/i, "");
+  tail = tail.replace(/^\s*[,;:]\s*/, "");
+
+  const dice = `${d10CountForAverage(dmgNum)}d10`;
+  const core = `${dice} [${dmgNum}]`;
+  const withTail = tail ? `${core}; ${tail}` : core;
+
+  return `${left} (${withTail})`;
+}
+
+function isSaveDprSpecial(specialText, { dprValue }){
+  return !/\battack\b/i.test(specialText)
+    && /\bDC\b/i.test(specialText)
+    && /\bsave\b/i.test(specialText)
+    && new RegExp(`\\b${dprValue}\\b`).test(specialText);
+}
+
+function parseSaveDprSpecial(specialText, { saveDc, dprValue }){
+  const name = (specialText.split("(")[0] || "").trim().replace(/[:\s]+$/,"");
+  const saveStatMatch = specialText.match(new RegExp(`DC\\s*${saveDc}\\s*([A-Z]{3})\\s*save`, "i"));
+  const saveStat = (saveStatMatch?.[1] || "DEX").toUpperCase();
+
+  const innerMatch = specialText.match(/\((.*)\)\s*$/s);
+  const inner = (innerMatch?.[1] || "").trim();
+
+  let rider = "";
+  const re1 = new RegExp(`\\b${dprValue}\\b\\s*damage\\b\\s*[,;:]?\\s*(.*)$`, "i");
+  const m1 = inner.match(re1);
+  if(m1) rider = (m1[1] || "").trim();
+  else {
+    const re2 = new RegExp(`\\b${dprValue}\\b\\s*[,;:]?\\s*(.*)$`, "i");
+    const m2 = inner.match(re2);
+    if(m2) rider = (m2[1] || "").trim();
+  }
+  rider = rider.replace(/^\s*[,;:]\s*/,"").replace(/\s+$/,"");
+
+  return { name, saveStat, rider };
+}
+
 // ===== Update =====
 function updateStats(){
+  const creatureName=(nameInput.value || "Creature").trim();
+
   const crStr=crSelect.value;
   const roleKey=roleSelect.value;
   const tierKey=bossSelect.value;
   const multi=Number(multiSelect.value);
   const monsterKey=monsterSelect.value;
-  const limited=document.getElementById('limitedUse').checked;
+  const limited=limitedUse.checked;
+  const asStatBlock=statBlockMode.checked;
+
   const base=crData[crStr];
   if(!base)return;
+
   const role=roles[roleKey];
   const boss=bossTiers[tierKey];
   const template=monsterTemplates[monsterKey];
+
   // --- core numbers
   let ac=base.ac+role.acMod;
   let hp=Math.round(base.hp*role.hpMult);
   const atk=base.atk+role.atkMod;
-  const dmg=Math.round(base.dmg*role.dmgMult);
+
+  const dprValue=Math.round(base.dmg*role.dmgMult);
+  const multiCount=(multi>1)?multi:1;
+  const perAttackValue=(multi>1)?Math.ceil(dprValue/multi):dprValue;
+  const saveDc=base.dc;
+
   // immunity / resistance adjustment
   const hasResistance=template.abilities?.some(a=>a.includes('Damage Resistance'));
-  if(template.immunity || hasResistance){hp=Math.round(hp*immunityHpMult(crValue(crStr)));}
+  if(template.immunity || hasResistance){
+    hp=Math.round(hp*immunityHpMult(crValue(crStr)));
+  }
+
   // boss bonus
   hp+=boss.hpBonus;
-  // limited‑use spike
-  const limitedDmg=limited?dmg*4:null;
+
   // effective CR display
   const effCrNumeric=crValue(crStr)+boss.crInc;
-  const effCrDisplay=tierKey==='None'?crStr:(effCrNumeric>=1?Math.round(effCrNumeric):'1/2');
-  // damages per attack
-  const perAttack=(multi>1)?Math.ceil(dmg/multi):null;
-  // role description
+  const effCrDisplay=(tierKey==='None') ? crStr : (effCrNumeric>=1 ? Math.round(effCrNumeric) : '1/2');
+
+  // limited-use spike (total)
+  const limitedDmg = limited ? (dprValue*4) : null;
+
+  // formatted specials
+  const specialsAll = (monsterKey!=='None' && template.abilities?.length)
+    ? template.abilities.map(a => formatAbilityText(a, { dprValue, perAttackValue, saveDc, atk, multiCount }))
+    : [];
+
+  // ===== Stat block mode =====
+  if(asStatBlock){
+    // Attack specials replace default attack section
+    const attackSpecials = specialsAll.filter(s => /\battack\b/i.test(s));
+    let attackSection = "";
+    if(attackSpecials.length){
+      attackSection = attackSpecials.map(renderAttackSpecial).join(", ");
+    } else {
+      const atkBonuses = repeatAtk(atk, multiCount);
+      const mainNumber = (multi>1) ? perAttackValue : dprValue;
+      const mainDice = `${d10CountForAverage(mainNumber)}d10`;
+      attackSection = `attack ${atkBonuses} (${mainDice} [${mainNumber}])`;
+    }
+
+    // Remaining specials (exclude attack specials)
+    let remainingSpecials = specialsAll.filter(s => !/\battack\b/i.test(s));
+
+    // Limited use attack, renamed from a save+DPR special if present
+    let limitedLine = "";
+    if(limited){
+      const targets = limitedTargetsForTier(effCrNumeric);
+      const dmgPerTarget = Math.round(limitedDmg / targets);
+
+      // FIX: dice count is based on the PER-TARGET damage displayed (dmgPerTarget), not total limitedDmg
+      const bigDice = `${d10CountForAverage(dmgPerTarget)}d10`;
+
+      let bigName = "big attack";
+      let bigSaveStat = "DEX";
+      let bigRider = "";
+
+      const idx = remainingSpecials.findIndex(s => isSaveDprSpecial(s, { dprValue }));
+      if(idx >= 0){
+        const parsed = parseSaveDprSpecial(remainingSpecials[idx], { saveDc, dprValue });
+        bigName = parsed.name || bigName;
+        bigSaveStat = parsed.saveStat || bigSaveStat;
+        bigRider = parsed.rider || "";
+        remainingSpecials = remainingSpecials.filter((_, i) => i !== idx);
+      }
+
+      const riderSuffix = bigRider ? `, ${bigRider}` : "";
+      limitedLine =
+        `${bigName} (recharge 5–6 OR 1/short or long rest) ` +
+        `DC ${saveDc} ${bigSaveStat} (` +
+        `${bigDice} [` +
+        `${dmgPerTarget} damage to ${targets} creature${targets>1?'s':''}` +
+        `]${riderSuffix})`;
+    }
+
+    const between = limitedLine ? ", " : "";
+
+    const specialLine = remainingSpecials.length ? `Special: ${remainingSpecials.join(", ")}` : "";
+    const legendaryLine = (tierKey !== 'None')
+      ? `Legendary: ${boss.la} per round, ${boss.res} per day`
+      : "";
+
+    const statHtml =
+      `<div class="statblock">` +
+        `<b>${creatureName} (CR ${effCrDisplay}):</b> ` +
+        `${hp} hp, ${ac} AC, ` +
+        `${attackSection}${between}${limitedLine}` +
+        (specialLine ? `<br>${specialLine}` : ``) +
+        (legendaryLine ? `<br>${legendaryLine}` : ``) +
+      `</div>`;
+
+    document.getElementById('stats').innerHTML = statHtml;
+    return;
+  }
+
+  // ===== normal display =====
   const desc=roleDescriptions[roleKey]||'';
-  // limited‑use per‑target calculation
+
   let limitedStr='';
   if(limited){
-    let targets;
-    if(effCrNumeric<=4) targets=2; // Tier I
-    else if(effCrNumeric<=10) targets=3; // Tier II
-    else if(effCrNumeric<=16) targets=6; // Tier III
-    else targets=9; // Tier IV+
-    const dmgPerTarget=Math.round(limitedDmg/targets);
-    limitedStr=` → <em>Limited‑use: ${limitedDmg} (${dmgPerTarget} to ${targets} target${targets>1?'s':''})</em>`;
+    const targets = limitedTargetsForTier(effCrNumeric);
+    const dmgPerTarget = Math.round(limitedDmg / targets);
+    limitedStr=` → <em>Limited-use: ${limitedDmg} (${dmgPerTarget} to ${targets} target${targets>1?'s':''})</em>`;
   }
-  // build HTML
-  let html=`<h3>CR ${crStr}`;
+
+  let html=`<h3>${creatureName}: CR ${crStr}`;
   if(tierKey!=='None'){html+=` → <span style='color:#900;'>${effCrDisplay}</span>`;}
   html+=` – ${roleKey}`;
   if(tierKey!=='None'){html+=`, ${tierKey}`;}
   if(monsterKey!=='None'){html+=`, ${monsterKey}`;}
   html+='</h3>';
+
   if(desc)html+=`<p class='roleDesc'>${desc}</p>`;
+
   html+=`<div>AC: <strong>${ac}</strong></div>`;
   html+=`<div>Hit Points: <strong>${hp}</strong>${boss.hpBonus?` (includes +${boss.hpBonus} boss bonus)`:''}</div>`;
   html+=`<div>Attack Bonus: <strong>+${atk}</strong></div>`;
-  html+=`<div>Damage Budget/round: <strong>${dmg}</strong>${limitedStr}</div>`;
-  if(perAttack!==null){html+=`<div>Damage per attack (×${multi}): <strong>${perAttack}</strong></div>`;}
-  html+=`<div>Save DC: <strong>${base.dc}</strong></div>`;
+  html+=`<div>Damage Budget/round: <strong>${dprValue}</strong>${limitedStr}</div>`;
+  if(multi>1){html+=`<div>Damage per attack (×${multi}): <strong>${perAttackValue}</strong></div>`;}
+  html+=`<div>Save DC: <strong>${saveDc}</strong></div>`;
   html+=`<div>Good Save Bonus: <strong>+${base.save}</strong></div>`;
-  if(tierKey!=='None'){html+=`<div>Legendary Resistances/Day: <strong>${boss.res}</strong></div><div>Legendary Actions/Round: <strong>${boss.la}</strong></div>`;}
-  // monster abilities
-  if(monsterKey!=='None'&&template.abilities.length){
-    html+="<div><strong>Special Abilities</strong><ul>"+
-          template.abilities.map(a=>`<li>${a.replace(/\b\d+d\d+(?:\+\d+)?/g,'[dmg]')}</li>`).join('')+
-          "</ul></div>";
+
+  if(tierKey!=='None'){
+    html+=`<div>Legendary Resistances/Day: <strong>${boss.res}</strong></div>`;
+    html+=`<div>Legendary Actions/Round: <strong>${boss.la}</strong></div>`;
   }
-  html+="<p class='note'>Role, boss, multiattack, monster template and limited‑use modifiers applied.</p>";
-  // render
+
+  if(monsterKey!=='None' && template.abilities.length){
+    html += "<div><strong>Special Abilities</strong><ul>" +
+      specialsAll.map(s => `<li>${s}</li>`).join('') +
+      "</ul></div>";
+  }
+
+  html+="<p class='note'>Role, boss, multiattack, monster template and limited-use modifiers applied.</p>";
   document.getElementById('stats').innerHTML=html;
 }
+
 // ===== listeners =====
-['change'].forEach(evt=>{[
+[
+  nameInput,
   crSelect,
   roleSelect,
   bossSelect,
   multiSelect,
   monsterSelect,
-  document.getElementById('limitedUse')
-].forEach(el=>el.addEventListener(evt,updateStats));});
+  limitedUse,
+  statBlockMode
+].forEach(el=>{
+  const evt = (el === nameInput) ? 'input' : 'change';
+  el.addEventListener(evt, updateStats);
+});
+
 updateStats();
 </script>
 </body>
