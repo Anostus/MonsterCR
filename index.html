@@ -399,7 +399,7 @@ function updateStats(){
         const parsed = parseSaveDprSpecial(remainingSpecials[idx], { saveDc, dprValue });
         bigName = parsed.name || bigName;
         bigSaveStat = parsed.saveStat || bigSaveStat;
-        bigRider = parsed.rider || "";
+        bigRider = parsed.rider || "save halves";
         remainingSpecials = remainingSpecials.filter((_, i) => i !== idx);
       }
 
@@ -416,7 +416,7 @@ function updateStats(){
 
     const specialLine = remainingSpecials.length ? `Special: ${remainingSpecials.join(", ")}` : "";
     const legendaryLine = (tierKey !== 'None')
-      ? `Legendary: ${boss.la} per round, ${boss.res} per day`
+      ? `Legendary: ${boss.la} actions per round, ${boss.res} resistances per day`
       : "";
 
     const statHtml =
