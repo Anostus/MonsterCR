@@ -13,13 +13,27 @@
     .note{font-size:0.8rem;color:#555}
     ul{margin:0.25rem 0 0.5rem 1.2rem;padding:0}
     .statblock{font-family:Georgia,"Times New Roman",serif;line-height:1.35}
+
+    /* CR row with radio buttons to the right */
+    .crRow{display:flex;align-items:center;gap:0.75rem;margin:0.4rem 0;flex-wrap:wrap}
+    .crRow .crLabel{display:inline-flex;align-items:center;margin:0}
+    .crRow select{margin-left:0}
+    .crRow .radioLabel{display:inline-flex;align-items:center;gap:0.35rem;margin:0}
+    .crRow input[type="radio"]{margin:0}
   </style>
 </head>
 <body>
   <h2>Monster Quick-Stats Generator</h2>
 
   <label>Creature Name: <input type="text" id="nameInput" value="Creature" /></label>
-  <label>Challenge Rating (CR): <select id="crSelect"></select></label>
+
+  <div class="crRow">
+    <span class="crLabel">Challenge Rating (CR):</span>
+    <select id="crSelect"></select>
+    <label class="radioLabel"><input type="radio" name="crMode" id="crModeTarget" value="target"> Use as target</label>
+    <label class="radioLabel"><input type="radio" name="crMode" id="crModeBase" value="base" checked> Use as base</label>
+  </div>
+
   <label>Role template: <select id="roleSelect"></select></label>
   <label>Boss tier: <select id="bossSelect"></select></label>
   <label>Multiattack: <select id="multiSelect"></select></label>
@@ -172,6 +186,8 @@ const multiSelect=document.getElementById('multiSelect');
 const monsterSelect=document.getElementById('monsterSelect');
 const limitedUse=document.getElementById('limitedUse');
 const statBlockMode=document.getElementById('statBlockMode');
+const crModeBase=document.getElementById('crModeBase');
+const crModeTarget=document.getElementById('crModeTarget');
 
 const crOrder=["0","1/8","1/4","1/2","1"];
 for(let i=2;i<=26;i++){crOrder.push(String(i));}
@@ -196,6 +212,36 @@ function crValue(cr){
   }
   return Number(cr);
 }
+
+// Exact numeric CR for target-mode math (does not change existing crValue behavior)
+function crToNumericExact(cr){
+  if(cr.includes('/')){
+    const [p,q]=cr.split('/').map(Number);
+    return p/q;
+  }
+  return Number(cr);
+}
+
+function numericToCrKey(n){
+  if(!Number.isFinite(n)) return null;
+
+  // Prefer integer keys when possible
+  if(Number.isInteger(n)){
+    const k = String(n);
+    if(crData[k]) return k;
+  }
+
+  // Try matching fractional keys
+  for(const k of Object.keys(crData)){
+    if(!k.includes('/')) continue;
+    const [p,q]=k.split('/').map(Number);
+    const v = p/q;
+    if(Math.abs(v - n) < 1e-9) return k;
+  }
+
+  return null;
+}
+
 function immunityHpMult(crNum){
   if(crNum<=4)return 0.5;
   if(crNum<=10)return 0.7;
@@ -326,14 +372,53 @@ function updateStats(){
   const limited=limitedUse.checked;
   const asStatBlock=statBlockMode.checked;
 
-  const base=crData[crStr];
-  if(!base)return;
-
   const role=roles[roleKey];
   const boss=bossTiers[tierKey];
   const template=monsterTemplates[monsterKey];
 
-  // --- core numbers
+  const crMode = document.querySelector('input[name="crMode"]:checked')?.value || 'base';
+
+  // Determine base CR (for stats) vs effective CR (for display/targeting)
+  let baseCrStr = crStr;
+  let effCrNumeric = 0;
+  let effCrDisplay = crStr;
+
+  if(crMode === 'base'){
+    // Existing behavior (unchanged)
+    baseCrStr = crStr;
+    effCrNumeric = crValue(crStr) + boss.crInc;
+    effCrDisplay = (tierKey==='None') ? crStr : (effCrNumeric>=1 ? Math.round(effCrNumeric) : '1/2');
+  } else {
+    // Use as target
+    if(tierKey === 'None'){
+      baseCrStr = crStr;
+      effCrNumeric = crValue(crStr);
+      effCrDisplay = crStr;
+    } else {
+      const targetExact = crToNumericExact(crStr);
+      const baseExact = targetExact - boss.crInc;
+      const derivedBaseKey = numericToCrKey(baseExact);
+
+      if(!derivedBaseKey){
+        document.getElementById('stats').innerHTML =
+          `<p><strong>Error: Selected CR is too low given boss tier options, please chose a lower boss tier or higher CR.</strong></p>`;
+        return;
+      }
+
+      baseCrStr = derivedBaseKey;
+      effCrNumeric = crValue(crStr); // effective CR is the selected (target) CR
+      effCrDisplay = crStr;
+    }
+  }
+
+  const base=crData[baseCrStr];
+  if(!base){
+    document.getElementById('stats').innerHTML =
+      `<p><strong>Error: Selected CR is too low given boss tier options, please chose a lower boss tier or higher CR.</strong></p>`;
+    return;
+  }
+
+  // --- core numbers (from base CR)
   let ac=base.ac+role.acMod;
   let hp=Math.round(base.hp*role.hpMult);
   const atk=base.atk+role.atkMod;
@@ -343,18 +428,14 @@ function updateStats(){
   const perAttackValue=(multi>1)?Math.ceil(dprValue/multi):dprValue;
   const saveDc=base.dc;
 
-  // immunity / resistance adjustment
+  // immunity / resistance adjustment (based on base CR)
   const hasResistance=template.abilities?.some(a=>a.includes('Damage Resistance'));
   if(template.immunity || hasResistance){
-    hp=Math.round(hp*immunityHpMult(crValue(crStr)));
+    hp=Math.round(hp*immunityHpMult(crValue(baseCrStr)));
   }
 
   // boss bonus
   hp+=boss.hpBonus;
-
-  // effective CR display
-  const effCrNumeric=crValue(crStr)+boss.crInc;
-  const effCrDisplay=(tierKey==='None') ? crStr : (effCrNumeric>=1 ? Math.round(effCrNumeric) : '1/2');
 
   // limited-use spike (total)
   const limitedDmg = limited ? (dprValue*4) : null;
@@ -387,7 +468,7 @@ function updateStats(){
       const targets = limitedTargetsForTier(effCrNumeric);
       const dmgPerTarget = Math.round(limitedDmg / targets);
 
-      // FIX: dice count is based on the PER-TARGET damage displayed (dmgPerTarget), not total limitedDmg
+      // dice count is based on the PER-TARGET damage displayed (dmgPerTarget), not total limitedDmg
       const bigDice = `${d10CountForAverage(dmgPerTarget)}d10`;
 
       let bigName = "big attack";
@@ -399,11 +480,11 @@ function updateStats(){
         const parsed = parseSaveDprSpecial(remainingSpecials[idx], { saveDc, dprValue });
         bigName = parsed.name || bigName;
         bigSaveStat = parsed.saveStat || bigSaveStat;
-        bigRider = parsed.rider || "save halves";
+        bigRider = parsed.rider || "";
         remainingSpecials = remainingSpecials.filter((_, i) => i !== idx);
       }
 
-      const riderSuffix = bigRider ? `, ${bigRider}` : "";
+      const riderSuffix = bigRider ? `, ${bigRider}` : ", save halves";
       limitedLine =
         `${bigName} (recharge 5–6 OR 1/short or long rest) ` +
         `DC ${saveDc} ${bigSaveStat} (` +
@@ -443,7 +524,8 @@ function updateStats(){
   }
 
   let html=`<h3>${creatureName}: CR ${crStr}`;
-  if(tierKey!=='None'){html+=` → <span style='color:#900;'>${effCrDisplay}</span>`;}
+  // Only show the "→ effective CR" arrow when using CR as base (original behavior)
+  if(tierKey!=='None' && crMode==='base'){html+=` → <span style='color:#900;'>${effCrDisplay}</span>`;}
   html+=` – ${roleKey}`;
   if(tierKey!=='None'){html+=`, ${tierKey}`;}
   if(monsterKey!=='None'){html+=`, ${monsterKey}`;}
@@ -483,7 +565,9 @@ function updateStats(){
   multiSelect,
   monsterSelect,
   limitedUse,
-  statBlockMode
+  statBlockMode,
+  crModeBase,
+  crModeTarget
 ].forEach(el=>{
   const evt = (el === nameInput) ? 'input' : 'change';
   el.addEventListener(evt, updateStats);
